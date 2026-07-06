@@ -1,0 +1,14 @@
+{
+  "name": "zainzafar",
+  "owner": { "name": "Zain Zafar" },
+  "description": "Zain Zafar's Claude Code plugins.",
+  "plugins": [
+    {
+      "name": "review-loop",
+      "source": ".",
+      "description": "Adversarial multi-model review loop (Codex + Cursor) that iterates a plan/spec until both reviewers return GO.",
+      "license": "MIT",
+      "tags": ["code-review", "planning"]
+    }
+  ]
+}
