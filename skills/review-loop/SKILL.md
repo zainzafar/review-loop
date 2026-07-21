@@ -18,18 +18,20 @@ actual repo before being conceded, and the document is patched between rounds.
 - `--threshold`: assurance % both reviewers must reach with a GO verdict. Default **95**.
 - `--max-rounds`: hard cap. Default **8**. Hitting it without convergence = report and stop; never
   loop forever on a disagreement.
-- `--cursor-model`: model for the Cursor reviewer. Default **`claude-opus-4-8-thinking-high`**.
-  Any id from `agent --list-models` works; parameterized overrides too
-  (e.g. `'claude-opus-4-8[context=1m,effort=high,fast=false]'`).
+- `--cursor-model`: model for the Cursor reviewer. Default **`cursor-grok-4.5-high`**.
+  Any id from `agent --list-models` works (e.g. `cursor-grok-4.5-medium`,
+  `claude-opus-4-8-thinking-high`); parameterized overrides too.
 - `--codex-model`: model for the Codex reviewer, passed as `codex exec -m <id>`. Default: omit
   the flag and let the account default apply (Codex runs OpenAI models only).
 - **Heterogeneity rule:** the two reviewers should be different model families (the defaults
-  satisfy this: Opus 4.8 vs GPT-5.x-codex). If a user override makes both reviewers the same
+  satisfy this: Grok 4.5 vs GPT-5.x-codex). If a user override makes both reviewers the same
   family, point out the lost diversity once, then proceed with their choice.
 
 ## Preflight (fail fast, tell the user exactly what's missing)
 
 1. `export PATH="$HOME/.local/bin:$PATH"` in every Bash call — both CLIs typically live there.
+   `jq` must also be on PATH (the Cursor reviewer's live stream is parsed with it); if missing,
+   tell the user to install it (`brew install jq` / their package manager).
 2. `codex login status` must say logged in; `agent status` (or `cursor-agent status`) must say
    logged in. If either fails, stop and give the user the login command (`codex` first run /
    `agent login`).
@@ -99,8 +101,24 @@ codex exec "$(cat <scratchpad>/round-N-prompt.md)" > <scratchpad>/round-N-codex.
 ```
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
-agent -p "$(cat <scratchpad>/round-N-prompt.md)" --model "claude-opus-4-8-thinking-high" --output-format text --trust > <scratchpad>/round-N-cursor.out 2>&1
-# --model: the --cursor-model value if given, else the claude-opus-4-8-thinking-high default
+set -o pipefail
+# Stream reasoning live (like Codex): stream-json + --stream-partial-output emits thinking/answer
+# deltas as they happen; jq --unbuffered turns them into plain text that grows in the file in real
+# time. Plain `--output-format text` buffers and only writes once the run completes — that's why
+# the Cursor file used to appear all-at-once. Reviewer stderr goes to a separate file so it never
+# corrupts the JSON stream; if the .out is empty, read the .err for the failure.
+agent -p "$(cat <scratchpad>/round-N-prompt.md)" --model "cursor-grok-4.5-high" \
+  --output-format stream-json --stream-partial-output --trust \
+  2> <scratchpad>/round-N-cursor.err \
+| jq --unbuffered -rj '
+    if   .type=="thinking"  and .subtype=="delta"     then .text
+    elif .type=="thinking"  and .subtype=="completed" then "\n\n--- verdict ---\n"
+    elif .type=="assistant" and (.timestamp_ms!=null) then (.message.content[]? | select(.type=="text") | .text)
+    else empty end
+  ' > <scratchpad>/round-N-cursor.out
+# --model: the --cursor-model value if given, else the cursor-grok-4.5-high default.
+# The .out streams reasoning, a "--- verdict ---" separator, then the final answer (VERDICT footer
+# lands at the tail, so the exit-check grep is unaffected).
 ```
 
 Expect 3–15 minutes each; use `run_in_background: true` and generous timeouts. If one CLI errors

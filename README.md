@@ -22,12 +22,14 @@ You supply and pay for the two external reviewer CLIs (they bill against your ow
   ChatGPT/Codex subscription.
 - **[Cursor Agent CLI](https://cursor.com/cli)** — the `agent` binary on your `PATH`, and logged in
   (`agent login`). Uses your Cursor subscription.
+- **[`jq`](https://jqlang.github.io/jq/)** on your `PATH` — used to render the Cursor reviewer's
+  live reasoning stream. `brew install jq` (or your package manager).
 
 Notes:
 
 - The skill prepends `export PATH="$HOME/.local/bin:$PATH"` to its shell calls, since both CLIs
   commonly install there. If yours live elsewhere, make sure they're on your `PATH`.
-- The default Cursor reviewer model (`claude-opus-4-8-thinking-high`) is a point-in-time example.
+- The default Cursor reviewer model (`cursor-grok-4.5-high`) is a point-in-time example.
   Override it with `--cursor-model` / `--codex-model` (see Usage). Run `agent --list-models` to see
   what's available to you.
 - Both reviewers are always invoked **read-only** — they read and report; only Claude patches files.
@@ -62,7 +64,7 @@ Then invoke it as `/review-loop <file>`.
 - `target-file` (required) — the document under review, repo-relative (e.g. `docs/plans/foo.md`).
 - `--threshold` — assurance % both reviewers must reach with a GO verdict. Default `95`.
 - `--max-rounds` — hard cap; hitting it without convergence reports and stops. Default `8`.
-- `--cursor-model` — model for the Cursor reviewer. Default `claude-opus-4-8-thinking-high`.
+- `--cursor-model` — model for the Cursor reviewer. Default `cursor-grok-4.5-high`.
 - `--codex-model` — model for the Codex reviewer (`codex exec -m <id>`). Default: account default.
 
 Example:
