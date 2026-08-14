@@ -12,20 +12,37 @@ actual repo before being conceded, and the document is patched between rounds.
 
 ## Arguments
 
-`/review-loop <target-file> [--threshold N] [--max-rounds N] [--cursor-model ID] [--codex-model ID]`
+`/review-loop <target-file> [--threshold N] [--max-rounds N] [--cursor-model ID] [--codex-model ID]
+[--codex-effort LEVEL]`
 
 - `target-file` (required): the document under review, repo-relative (e.g. `docs/plans/foo.md`).
 - `--threshold`: assurance % both reviewers must reach with a GO verdict. Default **95**.
 - `--max-rounds`: hard cap. Default **8**. Hitting it without convergence = report and stop; never
   loop forever on a disagreement.
-- `--cursor-model`: model for the Cursor reviewer. Default **`cursor-grok-4.5-high`**.
-  Any id from `agent --list-models` works (e.g. `cursor-grok-4.5-medium`,
-  `claude-opus-4-8-thinking-high`); parameterized overrides too.
-- `--codex-model`: model for the Codex reviewer, passed as `codex exec -m <id>`. Default: omit
-  the flag and let the account default apply (Codex runs OpenAI models only).
+- `--cursor-model`: model for the Cursor reviewer. Default **`cursor-grok-4.6-high`**.
+  Any id from `agent --list-models` works (e.g. `cursor-grok-4.6-xhigh`,
+  `claude-opus-5-thinking-high`); parameterized overrides too. Cursor bakes reasoning effort into
+  the model id (`-low` / `-medium` / `-high` / `-xhigh`), so pick the tier in the id itself.
+- `--codex-model`: model for the Codex reviewer, passed as `codex exec -m <id>`. Default
+  **`gpt-5.6-sol`**. The GPT-5.6 family is three siblings, deepest first:
+  - **`gpt-5.6-sol`** — frontier agentic coding model. The default; use it for real review work.
+  - **`gpt-5.6-terra`** — balanced everyday model. Good when Sol is rate-limited or a round is cheap.
+  - **`gpt-5.6-luna`** — fast and affordable. Fine for a quick re-verification round, weak as a
+    primary reviewer.
+
+  The account's available slugs are listed in `~/.codex/models_cache.json` (`.models[].slug`) —
+  read it rather than guessing. If the configured model isn't in that list (older CLI, different
+  plan), drop `-m` entirely and let the account default apply; say so in the round report.
+- `--codex-effort`: reasoning depth for the Codex reviewer, passed as
+  `-c model_reasoning_effort=<level>`. Default **`xhigh`**. Levels: `low`, `medium`, `high`,
+  `xhigh`, `max`, `ultra`. Review is the deep-reasoning case — do not drop below `high` without
+  the user asking. (Codex defaults to `low` on its own, which is far too shallow here.)
 - **Heterogeneity rule:** the two reviewers should be different model families (the defaults
-  satisfy this: Grok 4.5 vs GPT-5.x-codex). If a user override makes both reviewers the same
-  family, point out the lost diversity once, then proceed with their choice.
+  satisfy this: Grok 4.6 from xAI vs GPT-5.6 from OpenAI). If a user override makes both reviewers
+  the same family, point out the lost diversity once, then proceed with their choice.
+- **Model ids drift.** These defaults are point-in-time. If a CLI rejects one as unknown, list what
+  the account actually has (`agent --list-models`, `~/.codex/models_cache.json`), pick the nearest
+  equivalent tier, and tell the user what you substituted — never silently fall back to a weak model.
 
 ## Preflight (fail fast, tell the user exactly what's missing)
 
@@ -96,9 +113,17 @@ strongest signal this process produces. Launch both as background Bash tasks fro
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
-# add: -m "<codex-model>" only if --codex-model was given
-codex exec "$(cat <scratchpad>/round-N-prompt.md)" > <scratchpad>/round-N-codex.out 2>&1
+# -m: the --codex-model value if given, else the gpt-5.6-sol default.
+# -c model_reasoning_effort: the --codex-effort value if given, else xhigh. Codex's own default is
+# "low", so this flag is not optional — without it the reviewer skims.
+# < /dev/null is required: run non-interactively, `codex exec` otherwise sits waiting on stdin
+# ("Reading additional input from stdin...") and the background task never finishes.
+codex exec -m "gpt-5.6-sol" -c model_reasoning_effort="xhigh" \
+  "$(cat <scratchpad>/round-N-prompt.md)" < /dev/null > <scratchpad>/round-N-codex.out 2>&1
 ```
+
+`codex exec` must also be run from inside the git repo — outside one it exits immediately with
+"Not inside a trusted directory and --skip-git-repo-check was not specified."
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 set -o pipefail
@@ -107,7 +132,7 @@ set -o pipefail
 # time. Plain `--output-format text` buffers and only writes once the run completes — that's why
 # the Cursor file used to appear all-at-once. Reviewer stderr goes to a separate file so it never
 # corrupts the JSON stream; if the .out is empty, read the .err for the failure.
-agent -p "$(cat <scratchpad>/round-N-prompt.md)" --model "cursor-grok-4.5-high" \
+agent -p "$(cat <scratchpad>/round-N-prompt.md)" --model "cursor-grok-4.6-high" \
   --output-format stream-json --stream-partial-output --trust \
   2> <scratchpad>/round-N-cursor.err \
 | jq --unbuffered -rj '
@@ -116,7 +141,7 @@ agent -p "$(cat <scratchpad>/round-N-prompt.md)" --model "cursor-grok-4.5-high" 
     elif .type=="assistant" and (.timestamp_ms!=null) then (.message.content[]? | select(.type=="text") | .text)
     else empty end
   ' > <scratchpad>/round-N-cursor.out
-# --model: the --cursor-model value if given, else the cursor-grok-4.5-high default.
+# --model: the --cursor-model value if given, else the cursor-grok-4.6-high default.
 # The .out streams reasoning, a "--- verdict ---" separator, then the final answer (VERDICT footer
 # lands at the tail, so the exit-check grep is unaffected).
 ```
