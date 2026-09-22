@@ -29,7 +29,7 @@ Notes:
 
 - The skill prepends `export PATH="$HOME/.local/bin:$PATH"` to its shell calls, since both CLIs
   commonly install there. If yours live elsewhere, make sure they're on your `PATH`.
-- The default reviewer models (`cursor-grok-4.6-high` for Cursor, `gpt-5.6-sol` for Codex) are
+- The default reviewer models (`grok-4.7-high` for Cursor, `gpt-6-astra` for Codex) are
   point-in-time examples, and model ids drift. Override them with `--cursor-model` /
   `--codex-model` (see Usage). Run `agent --list-models` for the Cursor side; the Codex side's
   available slugs are in `~/.codex/models_cache.json`. If a default is rejected as unknown, the
@@ -67,14 +67,17 @@ Then invoke it as `/review-loop <file>`.
 - `target-file` (required) — the document under review, repo-relative (e.g. `docs/plans/foo.md`).
 - `--threshold` — assurance % both reviewers must reach with a GO verdict. Default `95`.
 - `--max-rounds` — hard cap; hitting it without convergence reports and stops. Default `8`.
-- `--cursor-model` — model for the Cursor reviewer. Default `cursor-grok-4.6-high`. Cursor bakes
-  reasoning effort into the id (`-low` / `-medium` / `-high` / `-xhigh`).
-- `--codex-model` — model for the Codex reviewer (`codex exec -m <id>`). Default `gpt-5.6-sol`
-  (frontier); `gpt-5.6-terra` is the balanced sibling and `gpt-5.6-luna` the fast, cheap one.
+- `--cursor-model` — model for the Cursor reviewer. Default `grok-4.7-high`. Cursor bakes
+  reasoning effort into the id (`-low` / `-medium` / `-high` / `-xhigh`). Note Grok 4.7 ids have
+  no `cursor-` prefix (unlike `cursor-grok-4.6-high`) — use the id exactly as `agent --list-models`
+  prints it.
+- `--codex-model` — model for the Codex reviewer (`codex exec -m <id>`). Default `gpt-6-astra`
+  (OpenAI's most capable); `gpt-5.6-sol` is the reliable workhorse fallback, `gpt-5.6-terra` the
+  balanced sibling and `gpt-5.6-luna` the fast, cheap one.
 - `--codex-effort` — Codex reasoning depth (`-c model_reasoning_effort=<level>`). Default `xhigh`.
-  Codex's own default is `low`, which is too shallow for review work.
+  Codex's own default (`medium` for Astra, `low` for the 5.6 family) is too shallow for review work.
 
-The two defaults are deliberately different model families — Grok 4.6 from xAI and GPT-5.6 from
+The two defaults are deliberately different model families — Grok 4.7 from xAI and GPT-6 Astra from
 OpenAI. Overriding both to the same family costs you the diversity the loop runs on.
 
 Example:

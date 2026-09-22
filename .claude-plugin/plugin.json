@@ -1,7 +1,7 @@
 {
   "name": "review-loop",
   "description": "Adversarial review loop: two heterogeneous external CLI reviewers (OpenAI Codex + Cursor Agent) review a plan/spec in parallel and iterate until both sign off (GO) at or above an assurance threshold.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": { "name": "Zain Zafar" },
   "homepage": "https://github.com/zainzafar/review-loop",
   "repository": "https://github.com/zainzafar/review-loop",

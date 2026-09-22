@@ -19,14 +19,19 @@ actual repo before being conceded, and the document is patched between rounds.
 - `--threshold`: assurance % both reviewers must reach with a GO verdict. Default **95**.
 - `--max-rounds`: hard cap. Default **8**. Hitting it without convergence = report and stop; never
   loop forever on a disagreement.
-- `--cursor-model`: model for the Cursor reviewer. Default **`cursor-grok-4.6-high`**.
-  Any id from `agent --list-models` works (e.g. `cursor-grok-4.6-xhigh`,
+- `--cursor-model`: model for the Cursor reviewer. Default **`grok-4.7-high`**.
+  Any id from `agent --list-models` works (e.g. `grok-4.7-xhigh`, `cursor-grok-4.6-high`,
   `claude-opus-5-thinking-high`); parameterized overrides too. Cursor bakes reasoning effort into
   the model id (`-low` / `-medium` / `-high` / `-xhigh`), so pick the tier in the id itself.
+  Note the naming break: Grok 4.7 ids have **no `cursor-` prefix** (`grok-4.7-high`), while
+  4.5/4.6 ids do (`cursor-grok-4.6-high`) — copy the id exactly as `agent --list-models` prints it.
 - `--codex-model`: model for the Codex reviewer, passed as `codex exec -m <id>`. Default
-  **`gpt-5.6-sol`**. The GPT-5.6 family is three siblings, deepest first:
-  - **`gpt-5.6-sol`** — frontier agentic coding model. The default; use it for real review work.
-  - **`gpt-5.6-terra`** — balanced everyday model. Good when Sol is rate-limited or a round is cheap.
+  **`gpt-6-astra`**. Current lineup, deepest first:
+  - **`gpt-6-astra`** — OpenAI's most capable model for complex, demanding work. The default; use
+    it for real review work.
+  - **`gpt-5.6-sol`** — reliable agentic workhorse. Good when Astra is rate-limited or a round is
+    cheap; it was the previous default and still reviews well.
+  - **`gpt-5.6-terra`** — balanced everyday model.
   - **`gpt-5.6-luna`** — fast and affordable. Fine for a quick re-verification round, weak as a
     primary reviewer.
 
@@ -36,9 +41,10 @@ actual repo before being conceded, and the document is patched between rounds.
 - `--codex-effort`: reasoning depth for the Codex reviewer, passed as
   `-c model_reasoning_effort=<level>`. Default **`xhigh`**. Levels: `low`, `medium`, `high`,
   `xhigh`, `max`, `ultra`. Review is the deep-reasoning case — do not drop below `high` without
-  the user asking. (Codex defaults to `low` on its own, which is far too shallow here.)
+  the user asking. (Left unset, Codex picks the model's own default — `medium` for Astra, `low`
+  for the 5.6 family — both far too shallow here.)
 - **Heterogeneity rule:** the two reviewers should be different model families (the defaults
-  satisfy this: Grok 4.6 from xAI vs GPT-5.6 from OpenAI). If a user override makes both reviewers
+  satisfy this: Grok 4.7 from xAI vs GPT-6 Astra from OpenAI). If a user override makes both reviewers
   the same family, point out the lost diversity once, then proceed with their choice.
 - **Model ids drift.** These defaults are point-in-time. If a CLI rejects one as unknown, list what
   the account actually has (`agent --list-models`, `~/.codex/models_cache.json`), pick the nearest
@@ -113,12 +119,12 @@ strongest signal this process produces. Launch both as background Bash tasks fro
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
-# -m: the --codex-model value if given, else the gpt-5.6-sol default.
+# -m: the --codex-model value if given, else the gpt-6-astra default.
 # -c model_reasoning_effort: the --codex-effort value if given, else xhigh. Codex's own default is
-# "low", so this flag is not optional — without it the reviewer skims.
+# "medium" (Astra) or "low" (5.6), so this flag is not optional — without it the reviewer skims.
 # < /dev/null is required: run non-interactively, `codex exec` otherwise sits waiting on stdin
 # ("Reading additional input from stdin...") and the background task never finishes.
-codex exec -m "gpt-5.6-sol" -c model_reasoning_effort="xhigh" \
+codex exec -m "gpt-6-astra" -c model_reasoning_effort="xhigh" \
   "$(cat <scratchpad>/round-N-prompt.md)" < /dev/null > <scratchpad>/round-N-codex.out 2>&1
 ```
 
@@ -132,7 +138,7 @@ set -o pipefail
 # time. Plain `--output-format text` buffers and only writes once the run completes — that's why
 # the Cursor file used to appear all-at-once. Reviewer stderr goes to a separate file so it never
 # corrupts the JSON stream; if the .out is empty, read the .err for the failure.
-agent -p "$(cat <scratchpad>/round-N-prompt.md)" --model "cursor-grok-4.6-high" \
+agent -p "$(cat <scratchpad>/round-N-prompt.md)" --model "grok-4.7-high" \
   --output-format stream-json --stream-partial-output --trust \
   2> <scratchpad>/round-N-cursor.err \
 | jq --unbuffered -rj '
@@ -141,7 +147,7 @@ agent -p "$(cat <scratchpad>/round-N-prompt.md)" --model "cursor-grok-4.6-high" 
     elif .type=="assistant" and (.timestamp_ms!=null) then (.message.content[]? | select(.type=="text") | .text)
     else empty end
   ' > <scratchpad>/round-N-cursor.out
-# --model: the --cursor-model value if given, else the cursor-grok-4.6-high default.
+# --model: the --cursor-model value if given, else the grok-4.7-high default.
 # The .out streams reasoning, a "--- verdict ---" separator, then the final answer (VERDICT footer
 # lands at the tail, so the exit-check grep is unaffected).
 ```
