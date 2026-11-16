@@ -29,8 +29,8 @@ Notes:
 
 - The skill prepends `export PATH="$HOME/.local/bin:$PATH"` to its shell calls, since both CLIs
   commonly install there. If yours live elsewhere, make sure they're on your `PATH`.
-- The default reviewer models (`grok-4.7-high` for Cursor, `gpt-6-astra` for Codex) are
-  point-in-time examples, and model ids drift. Override them with `--cursor-model` /
+- The default reviewer models (`grok-4.7-high` for Cursor, `gpt-6.1-sol` for Codex, or `gpt-6-sol`
+  when Codex is logged in with a ChatGPT account) are point-in-time examples, and model ids drift. Override them with `--cursor-model` /
   `--codex-model` (see Usage). Run `agent --list-models` for the Cursor side; the Codex side's
   available slugs are in `~/.codex/models_cache.json`. If a default is rejected as unknown, the
   skill lists what your account actually has and tells you what it substituted.
@@ -71,14 +71,17 @@ Then invoke it as `/review-loop <file>`.
   reasoning effort into the id (`-low` / `-medium` / `-high` / `-xhigh`). Note Grok 4.7 ids have
   no `cursor-` prefix (unlike `cursor-grok-4.6-high`) — use the id exactly as `agent --list-models`
   prints it.
-- `--codex-model` — model for the Codex reviewer (`codex exec -m <id>`). Default `gpt-6-astra`
-  (OpenAI's most capable); `gpt-5.6-sol` is the reliable workhorse fallback, `gpt-5.6-terra` the
-  balanced sibling and `gpt-5.6-luna` the fast, cheap one.
+- `--codex-model` — model for the Codex reviewer (`codex exec -m <id>`). Default `gpt-6.1-sol`.
+  ChatGPT-account logins can't use 6.1 Sol (Codex refuses it with `model_not_found`), so the skill
+  checks `codex login status` and uses `gpt-6-sol` there automatically. `gpt-6-astra` is OpenAI's
+  "most capable" model and the former default, `gpt-6-luna` the fast, cheap GPT-6, and the
+  `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` trio the previous generation.
 - `--codex-effort` — Codex reasoning depth (`-c model_reasoning_effort=<level>`). Default `xhigh`.
-  Codex's own default (`medium` for Astra, `low` for the 5.6 family) is too shallow for review work.
+  Codex's own default (`medium` for the GPT-6 family, `low` for 5.6 Sol) is too shallow for review work.
 
-The two defaults are deliberately different model families — Grok 4.7 from xAI and GPT-6 Astra from
-OpenAI. Overriding both to the same family costs you the diversity the loop runs on.
+The two defaults are deliberately different model families — Grok 4.7 from xAI and GPT-6 Sol from
+OpenAI. Overriding both to the same family (Cursor also lists OpenAI ids such as `gpt-5.6-sol-xhigh`)
+costs you the diversity the loop runs on.
 
 Example:
 

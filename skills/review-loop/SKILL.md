@@ -20,20 +20,30 @@ actual repo before being conceded, and the document is patched between rounds.
 - `--max-rounds`: hard cap. Default **8**. Hitting it without convergence = report and stop; never
   loop forever on a disagreement.
 - `--cursor-model`: model for the Cursor reviewer. Default **`grok-4.7-high`**.
-  Any id from `agent --list-models` works (e.g. `grok-4.7-xhigh`, `cursor-grok-4.6-high`,
-  `claude-opus-5-thinking-high`); parameterized overrides too. Cursor bakes reasoning effort into
+  Any id from `agent --list-models` works (e.g. `grok-4.7-xhigh`, `claude-opus-5-5-high`,
+  `claude-fable-5-thinking-high`, `cursor-grok-4.6-high`); parameterized overrides too. Cursor bakes reasoning effort into
   the model id (`-low` / `-medium` / `-high` / `-xhigh`), so pick the tier in the id itself.
   Note the naming break: Grok 4.7 ids have **no `cursor-` prefix** (`grok-4.7-high`), while
   4.5/4.6 ids do (`cursor-grok-4.6-high`) — copy the id exactly as `agent --list-models` prints it.
 - `--codex-model`: model for the Codex reviewer, passed as `codex exec -m <id>`. Default
-  **`gpt-6-astra`**. Current lineup, deepest first:
-  - **`gpt-6-astra`** — OpenAI's most capable model for complex, demanding work. The default; use
-    it for real review work.
-  - **`gpt-5.6-sol`** — reliable agentic workhorse. Good when Astra is rate-limited or a round is
-    cheap; it was the previous default and still reviews well.
-  - **`gpt-5.6-terra`** — balanced everyday model.
-  - **`gpt-5.6-luna`** — fast and affordable. Fine for a quick re-verification round, weak as a
+  **`gpt-6.1-sol`** on API-key logins, **`gpt-6-sol`** on ChatGPT-account logins (Preflight step 3
+  picks between them). Lineup verified 2026-11-16 against `codex-cli 0.155.1`, deepest first:
+  - **`gpt-6.1-sol`** — the default where the account allows it; use it for real review work.
+    On a ChatGPT-account Codex it is refused with "The 'gpt-6.1-sol' model is not supported when
+    using Codex with a ChatGPT account" (`model_not_found`, HTTP 400). Being listed in
+    `~/.codex/models_cache.json` does NOT mean it works (2026-10-23: listed, still refused) —
+    trust `codex login status`, not the cache.
+  - **`gpt-6-sol`** — the default on ChatGPT-account logins; verified working 2026-11-16. Same
+    Sol line one step back; reviews well.
+  - **`gpt-6-astra`** — OpenAI's "most capable" model and the former default. Sol is preferred for
+    review loops; use Astra only if the user asks for it.
+  - **`gpt-6-luna`** — fast and cheap GPT-6. Fine for a quick re-verification round, weak as a
     primary reviewer.
+  - **`gpt-5.6-sol`** / **`gpt-5.6-terra`** / **`gpt-5.6-luna`** — previous generation, still
+    listed on most accounts. Fall back here only when every GPT-6 id is rate-limited.
+  - **Cursor out of usage** ("You're out of usage. Switch to Auto"): every named model is refused,
+    only `--model auto` runs (2026-10-23). Auto doesn't say which model it routes to, so heterogeneity
+    is unverified — tell the user, and run it anyway rather than dropping to one reviewer.
 
   The account's available slugs are listed in `~/.codex/models_cache.json` (`.models[].slug`) —
   read it rather than guessing. If the configured model isn't in that list (older CLI, different
@@ -41,11 +51,13 @@ actual repo before being conceded, and the document is patched between rounds.
 - `--codex-effort`: reasoning depth for the Codex reviewer, passed as
   `-c model_reasoning_effort=<level>`. Default **`xhigh`**. Levels: `low`, `medium`, `high`,
   `xhigh`, `max`, `ultra`. Review is the deep-reasoning case — do not drop below `high` without
-  the user asking. (Left unset, Codex picks the model's own default — `medium` for Astra, `low`
-  for the 5.6 family — both far too shallow here.)
+  the user asking. (Left unset, Codex picks the model's own default — `medium` for the GPT-6
+  family, `low` for 5.6 Sol — both far too shallow here.)
 - **Heterogeneity rule:** the two reviewers should be different model families (the defaults
-  satisfy this: Grok 4.7 from xAI vs GPT-6 Astra from OpenAI). If a user override makes both reviewers
-  the same family, point out the lost diversity once, then proceed with their choice.
+  satisfy this: Grok 4.7 from xAI vs GPT-6 Sol from OpenAI). Cursor now lists OpenAI ids too
+  (`gpt-5.6-sol-xhigh`, `gpt-5.3-codex-high`) — picking one of those pairs two OpenAI reviewers.
+  If a user override makes both reviewers the same family, point out the lost diversity once,
+  then proceed with their choice.
 - **Model ids drift.** These defaults are point-in-time. If a CLI rejects one as unknown, list what
   the account actually has (`agent --list-models`, `~/.codex/models_cache.json`), pick the nearest
   equivalent tier, and tell the user what you substituted — never silently fall back to a weak model.
@@ -58,10 +70,13 @@ actual repo before being conceded, and the document is patched between rounds.
 2. `codex login status` must say logged in; `agent status` (or `cursor-agent status`) must say
    logged in. If either fails, stop and give the user the login command (`codex` first run /
    `agent login`).
-3. Target file exists and is saved. Identify the repo's **binding convention files** — CLAUDE.md
+3. **Pick the Codex default from the login type.** If `codex login status` says
+   `Logged in using ChatGPT`, the `gpt-6.1-sol` default is refused — use `gpt-6-sol` instead and
+   say so in the first round report. Any explicit `--codex-model` wins over this.
+4. Target file exists and is saved. Identify the repo's **binding convention files** — CLAUDE.md
    at the repo root plus any AGENTS.md files in the subtrees the document touches — and name them
    in every prompt.
-4. Both CLIs are invoked **read-only**: Codex via plain `codex exec` (default sandbox — no
+5. Both CLIs are invoked **read-only**: Codex via plain `codex exec` (default sandbox — no
    `--full-auto`, no sandbox overrides), Cursor via `agent -p ... --trust` and **NEVER**
    `--force` / `-f` / `--yolo` (those enable file modification). Reviewers read and report;
    only Claude patches files.
@@ -119,12 +134,12 @@ strongest signal this process produces. Launch both as background Bash tasks fro
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
-# -m: the --codex-model value if given, else the gpt-6-astra default.
+# -m: the --codex-model value if given, else gpt-6.1-sol (API-key login) / gpt-6-sol (ChatGPT login).
 # -c model_reasoning_effort: the --codex-effort value if given, else xhigh. Codex's own default is
-# "medium" (Astra) or "low" (5.6), so this flag is not optional — without it the reviewer skims.
+# "medium" (GPT-6 family) or "low" (5.6 Sol), so this flag is not optional — without it the reviewer skims.
 # < /dev/null is required: run non-interactively, `codex exec` otherwise sits waiting on stdin
 # ("Reading additional input from stdin...") and the background task never finishes.
-codex exec -m "gpt-6-astra" -c model_reasoning_effort="xhigh" \
+codex exec -m "gpt-6.1-sol" -c model_reasoning_effort="xhigh" \
   "$(cat <scratchpad>/round-N-prompt.md)" < /dev/null > <scratchpad>/round-N-codex.out 2>&1
 ```
 
